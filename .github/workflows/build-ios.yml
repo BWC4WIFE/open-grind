@@ -1,0 +1,71 @@
+name: Build iOS IPA
+
+on:
+#  push:
+ #   branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Apple build tools
+        run: |
+          brew install cmake ninja pkg-config llvm
+          echo \"LIBCLANG_PATH=$(brew --prefix llvm)/lib\" >> \"$GITHUB_ENV\"
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal --target aarch64-apple-ios
+          rustup default 1.95.0
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build unsigned iOS app archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \\
+            -project src-tauri/gen/apple/open-grind.xcodeproj \\
+            -scheme open-grind_iOS \\
+            -configuration Release \\
+            -destination 'generic/platform=iOS' \\
+            -archivePath \"$RUNNER_TEMP/OpenGrind.xcarchive\" \\
+            CODE_SIGNING_ALLOWED=NO \\
+            archive
+
+      - name: Package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_dir=\"$RUNNER_TEMP/OpenGrind.xcarchive/Products/Applications\"
+          app_path=$(find \"$app_dir\" -maxdepth 1 -type d -name '*.app' -print -quit)
+          if [[ -z \"$app_path\" ]]; then
+            echo \"No iOS app was produced by xcodebuild\" >&2
+            exit 1
+          fi
+          mkdir -p \"$RUNNER_TEMP/ipa/Payload\"
+          cp -R \"$app_path\" \"$RUNNER_TEMP/ipa/Payload/\"
+          (cd \"$RUNNER_TEMP/ipa\" && zip -qr -X \"$GITHUB_WORKSPACE/open-grind-ios-unsigned.ipa\" Payload)
+
+      - name: Upload iOS IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-grind-ios-unsigned-ipa
+          path: open-grind-ios-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14 
