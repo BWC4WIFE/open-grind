@@ -32,13 +32,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/android
-          shopt -s nullglob
-          apks=(src-tauri/gen/android/app/build/outputs/apk/*/release/*-unsigned.apk)
+
+          mapfile -d '' apks < <(find src-tauri/gen/android/app/build/outputs -type f -name '*.apk' -print0)
+
           if (( ${#apks[@]} == 0 )); then
-            echo \"No unsigned APKs were produced\" >&2
+            echo "No APKs were produced under src-tauri/gen/android/app/build/outputs" >&2
             exit 1
           fi
-          cp \"${apks[@]}\" artifacts/android/
+
+          cp -n -- "${apks[@]}" artifacts/android/
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
