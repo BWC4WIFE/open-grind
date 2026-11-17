@@ -1,0 +1,49 @@
+name: Build Android APK
+
+on:
+  #push:
+    #branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Android APK
+        run: nix run .#build-android
+
+      - name: Collect APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android
+          shopt -s nullglob
+          apks=(src-tauri/gen/android/app/build/outputs/apk/*/release/*-unsigned.apk)
+          if (( ${#apks[@]} == 0 )); then
+            echo \"No unsigned APKs were produced\" >&2
+            exit 1
+          fi
+          cp \"${apks[@]}\" artifacts/android/
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-grind-android-apks
+          path: artifacts/android/*.apk
+          if-no-files-found: error
+          retention-days: 14
