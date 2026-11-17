@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
-    timeout-minutes: 180
+    runs-on: macos-15
+    timeout-minutes: 69
 
     steps:
       - name: Check out repository
